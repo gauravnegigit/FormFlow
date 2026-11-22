@@ -1,5 +1,6 @@
 import os
 import re
+import json 
 from typing import Any, Literal , Optional
 from pydantic import BaseModel, Field , ConfigDict, field_validator
 from langchain_groq import ChatGroq
@@ -7,24 +8,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 from pathlib import Path 
 
-parent_dir = Path(__file__).resolve().parent.parent
+parent_dir = Path(__file__).resolve().parent
 project_root = parent_dir.parents[0]
 load_dotenv(project_root / ".env")
 
 # -------------------- DYNAMIC FORM SCHEMAS --------------------
 
 class FlexibleModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
 class FieldOption(FlexibleModel):
     label: str
     value: str
 
 class ValidationRule(FlexibleModel):
-    min_length: Optional[int] = None
-    max_length: Optional[int] = None
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
     pattern: Optional[str] = None
     allowed_file_types: list[str] = Field(default_factory=list)
     max_file_size_mb: Optional[int] = None
@@ -46,8 +43,6 @@ class FormField(FlexibleModel):
         "checkbox", "select", "multiselect","file"
     ]
     required: bool = False
-    description: str | None = None
-    placeholder: str | None = None
     options: list[FieldOption] = Field(default_factory=list)
     validations: list[ValidationRule] = Field(default_factory=list)
     conditions: list[ConditionalRule] = Field(default_factory=list)
@@ -58,7 +53,7 @@ class FormSection(FlexibleModel):
     description: str | None = None
     fields: list[FormField]
 
-class FormDefinition(FlexibleModel):
+class FormDefinition(BaseModel):
     title: str
     description: str
     sections: list[FormSection]
@@ -87,7 +82,6 @@ class FormDefinition(FlexibleModel):
 class FormGenerationRequest(BaseModel):
     prompt: str
     organization_context: str | None = None
-    additional_requirements: list[str] = Field(default_factory=list)
     locale: str = "en"
 
 def get_llm():
@@ -141,9 +135,6 @@ The generated form is a DRAFT and must be reviewed before publication.
 #     ORGANIZATION CONTEXT:
 #     {request.organization_context or "Not provided"}
 
-#     ADDITIONAL REQUIREMENTS:
-#     {request.additional_requirements}
-
 #     LANGUAGE:
 #     {request.locale}
 
@@ -163,16 +154,12 @@ def generate_form(requirements: str) -> FormDefinition:
 
     llm = get_llm()
     form_llm = llm.with_structured_output(FormDefinition)
-    prompt = ChatPromptTemplate.from_messages[("system" , SYSTEM_PROMPT) , ("human" , "Create a form based on these requirements:\n{requirements}")]
+    prompt = ChatPromptTemplate.from_messages([("system" , SYSTEM_PROMPT) , ("human" , "Create a form based on these requirements:\n{requirements}")])
 
     chain = prompt | form_llm 
     result = chain.invoke({"requirements" : requirements})
 
-    return {
-        "success": True,
-        "status": "DRAFT",
-        "form": result.model_dump()
-    }
+    return result
 
 def form_to_json(form: FormDefinition) -> dict:
     return form.model_dump(mode="json")
@@ -182,4 +169,6 @@ if __name__ == "__main__":
     form = generate_form(req)
     print(form)
     res = form_to_json(form)
+    with open("data.json", "w" , encoding = "utf-8") as file :
+        json.dump(res , file , indent = 4)
     print(res)
