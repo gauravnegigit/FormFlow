@@ -5,3 +5,5 @@ target/
 .vscode/
 *.class
 *.log
+# Spring Boot secrets
+backend/src/main/resources/application.properties
