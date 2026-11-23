@@ -1,4 +1,4 @@
-package in.FormFlow.demo.Entity.enums;
+package in.FormFlow.demo.enums;
 
 public enum SubmissionStatus {
     PENDING,

@@ -7,7 +7,7 @@ import in.FormFlow.demo.dto.auth.LoginRequest;
 import in.FormFlow.demo.dto.auth.AuthResponse;
 import in.FormFlow.demo.exception.DuplicateEmailException;
 import in.FormFlow.demo.Entity.User;
-import in.FormFlow.demo.Entity.enums.UserRole;
+import in.FormFlow.demo.enums.UserRole;
 import in.FormFlow.demo.Repository.UserRepository;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
