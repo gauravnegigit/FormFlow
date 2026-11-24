@@ -3,30 +3,22 @@ import re
 import json 
 from typing import Any, Literal , Optional
 from pydantic import BaseModel, Field , ConfigDict, field_validator
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from dotenv import load_dotenv
 from pathlib import Path 
-
-parent_dir = Path(__file__).resolve().parent
-project_root = parent_dir.parents[0]
-load_dotenv(project_root / ".env")
+from client import _llm
 
 # -------------------- DYNAMIC FORM SCHEMAS --------------------
 
-class FlexibleModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-class FieldOption(FlexibleModel):
+class FieldOption(BaseModel):
     label: str
     value: str
 
-class ValidationRule(FlexibleModel):
+class ValidationRule(BaseModel):
     pattern: Optional[str] = None
     allowed_file_types: list[str] = Field(default_factory=list)
     max_file_size_mb: Optional[int] = None
 
-class ConditionalRule(FlexibleModel):
+class ConditionalRule(BaseModel):
     depends_on: str
     operator: Literal[
         "equals", "not_equals", "contains",
@@ -34,7 +26,7 @@ class ConditionalRule(FlexibleModel):
     ]
     value: Any = None
 
-class FormField(FlexibleModel):
+class FormField(BaseModel):
     id: str
     label: str
     type: Literal[
@@ -47,7 +39,7 @@ class FormField(FlexibleModel):
     validations: list[ValidationRule] = Field(default_factory=list)
     conditions: list[ConditionalRule] = Field(default_factory=list)
 
-class FormSection(FlexibleModel):
+class FormSection(BaseModel):
     id: str
     title: str
     description: str | None = None
@@ -84,11 +76,6 @@ class FormGenerationRequest(BaseModel):
     organization_context: str | None = None
     locale: str = "en"
 
-def get_llm():
-    return ChatGroq(
-        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
-        temperature=0
-        )
 
 # -------------------- FORM GENERATOR --------------------
 
@@ -152,7 +139,7 @@ def generate_form(requirements: str) -> FormDefinition:
     if not requirements.strip():
         raise ValueError("Form requirements cannot be empty.")
 
-    llm = get_llm()
+    llm = _llm()
     form_llm = llm.with_structured_output(FormDefinition)
     prompt = ChatPromptTemplate.from_messages([("system" , SYSTEM_PROMPT) , ("human" , "Create a form based on these requirements:\n{requirements}")])
 

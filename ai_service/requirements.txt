@@ -1,0 +1,10 @@
+
+pydantic
+python-dotenv
+langchain-core
+langchain-groq
+langchain-openai
+PyMuPDF
+pytesseract
+Pillow
+python-docx

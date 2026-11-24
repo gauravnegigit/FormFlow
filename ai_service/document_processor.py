@@ -6,7 +6,6 @@ import pytesseract
 from PIL import Image
 from docx import Document
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
 
 SUPPORTED_FORMATS = {
     ".pdf", ".png", ".jpg", ".jpeg",

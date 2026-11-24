@@ -3,12 +3,9 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
+from client import _llm
 from langchain_core.prompts import ChatPromptTemplate
-
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 class CommonIssue(BaseModel):
     theme: str = Field(description="Short name for a group of similar rejection reasons or "
@@ -106,9 +103,6 @@ RULES:
 - Recommendations must be actionable (e.g. clarify a form field, add a
   validation rule, rebalance reviewer workload).
 - Do not mention or infer any applicant's personal details."""
-
-def _llm():
-    return ChatGroq(model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"), temperature=0)
 
 def _fallback(stats: ReportStats) -> NarrativeReport:
     """Used if the LLM call fails, so reports are never blocked."""

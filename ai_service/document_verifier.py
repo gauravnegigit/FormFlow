@@ -3,12 +3,9 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
+from client import _llm
 from langchain_core.prompts import ChatPromptTemplate
-
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 class ExtractedField(BaseModel):
     field: str
@@ -43,9 +40,6 @@ Rules:
 - Also extract other key identifiers you see (e.g. father_name, issue_date).
 - Report issues: expired document, illegible text, wrong document type,
   signs of tampering or missing sections."""
-
-def _llm():
-    return ChatGroq(model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"), temperature=0)
 
 def extract_fields(document_text: str, expected_document_type: str , requested_fields: list[str]) -> ExtractionResult:
     prompt = ChatPromptTemplate.from_messages([
