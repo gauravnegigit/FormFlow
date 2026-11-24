@@ -1,7 +1,7 @@
 
 package in.FormFlow.demo.Entity;
 
-import in.FormFlow.demo.Entity.enums.UserRole;
+import in.FormFlow.demo.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

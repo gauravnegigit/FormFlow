@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -34,7 +35,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
+        
         String authHeader = request.getHeader("Authorization");
+        
+        System.out.println("REQUEST: " + request.getMethod()
+        + " " + request.getRequestURI());
+
+        System.out.println("AUTH HEADER PRESENT: "
+                + (authHeader != null));
+
+        System.out.println("BEARER PREFIX PRESENT: "
+                + (authHeader != null && authHeader.startsWith("Bearer ")));
 
         // No token: continue; SecurityConfig decides whether access is allowed
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -45,22 +56,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-            Claims claims = jwtService.extractClaims(token);
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                Claims claims = jwtService.extractClaims(token);
 
-            String userId = claims.getSubject();
-            String role = claims.get("role", String.class);
+                String userId = claims.getSubject();
+                String role = claims.get("role", String.class);
 
-            var authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userId,
-                            null,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                    );
+                String authority = (role != null && role.startsWith("ROLE_")) ? role : "ROLE_" + role;
+                var authorities = role != null ? List.of(new SimpleGrantedAuthority(authority)) : List.<SimpleGrantedAuthority>of();
 
-            SecurityContextHolder.getContext()
-                    .setAuthentication(authentication);
+                var authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userId,
+                                null,
+                                authorities
+                        );
+
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                SecurityContextHolder.getContext()
+                        .setAuthentication(authentication);
+            }
 
         } catch (JwtException | IllegalArgumentException ex) {
+
+            System.out.println("JWT VALIDATION FAILED!");
+            System.out.println("Reason: " + ex.getMessage());
+
             SecurityContextHolder.clearContext();
         }
 

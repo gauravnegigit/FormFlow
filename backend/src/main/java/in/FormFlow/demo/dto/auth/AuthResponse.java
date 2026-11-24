@@ -1,7 +1,7 @@
 
 package in.FormFlow.demo.dto.auth;
 
-import in.FormFlow.demo.Entity.enums.UserRole;
+import in.FormFlow.demo.enums.UserRole;
 import java.util.UUID;
 
 public record AuthResponse(
