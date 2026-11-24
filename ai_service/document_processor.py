@@ -41,14 +41,15 @@ def extract_text(file_path: str) -> str:
     return ""
 
 def _extract_pdf(path: Path) -> str:
-    """Extract embedded PDF text, falling back to OCR."""
     pages = []
-
     with fitz.open(path) as pdf:
         for page in pdf:
             text = page.get_text().strip()
+            if not text:  # scanned page -> OCR
+                pix = page.get_pixmap(dpi=300)
+                img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                text = pytesseract.image_to_string(img)
             pages.append(text)
-
     return "\n\n".join(pages)
 
 def _extract_image(path: Path) -> str:
