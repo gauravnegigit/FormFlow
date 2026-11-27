@@ -23,6 +23,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
+          cache-dependency-path: backend/pom.xml
 
       - name: Run Maven tests
-        run: ./mvnw -B test
+        run: chmod +x mvnw && ./mvnw -B test
