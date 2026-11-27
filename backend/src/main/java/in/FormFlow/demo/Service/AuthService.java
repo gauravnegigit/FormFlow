@@ -1,45 +1,51 @@
 package in.FormFlow.demo.Service;
 
+import in.FormFlow.demo.Entity.AdminInvitation;
+import in.FormFlow.demo.Entity.Organization;
+import in.FormFlow.demo.Entity.User;
+import in.FormFlow.demo.Repository.AdminInvitationRepository;
+import in.FormFlow.demo.Repository.UserRepository;
+import in.FormFlow.demo.config.TokenHashUtils;
 import in.FormFlow.demo.dto.auth.AuthResponse;
 import in.FormFlow.demo.dto.auth.LoginRequest;
 import in.FormFlow.demo.dto.auth.RegisterRequest;
 import in.FormFlow.demo.dto.auth.UserResponse;
 import in.FormFlow.demo.dto.form.CreateReviewerRequest;
-import in.FormFlow.demo.Entity.Organization;
-import in.FormFlow.demo.Entity.User;
 import in.FormFlow.demo.enums.UserRole;
 import in.FormFlow.demo.exception.DuplicateEmailException;
 import in.FormFlow.demo.exception.ResourceNotFoundException;
-import in.FormFlow.demo.Repository.OrganizationRepository;
-import in.FormFlow.demo.Repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
     private final UserRepository userRepository;
-    private final OrganizationRepository organizationRepository;
+    private final AdminInvitationRepository adminInvitationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
     public AuthService(
             UserRepository userRepository,
-            OrganizationRepository organizationRepository,
+            AdminInvitationRepository adminInvitationRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService) {
 
         this.userRepository = userRepository;
-        this.organizationRepository = organizationRepository;
+        this.adminInvitationRepository = adminInvitationRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
@@ -47,23 +53,48 @@ public class AuthService {
     @Transactional
     public UserResponse register(RegisterRequest request) {
 
-        String email = request.email().trim().toLowerCase();
+        String rawToken = request.invitationToken().trim();
+        String tokenHash = TokenHashUtils.sha256Hex(rawToken);
+        LocalDateTime now = LocalDateTime.now();
 
-        // 1. Check if email already exists
+        // 1. Lock the invitation row to prevent concurrent registrations from using the same token
+        AdminInvitation invitation = adminInvitationRepository.findForUpdateByTokenHash(tokenHash)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Invalid invitation token"
+                ));
+
+        // 2. Reject already-used invitations
+        if (invitation.getUsedAt() != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Invitation token has already been used"
+            );
+        }
+
+        // 3. Reject expired invitations
+        if (!invitation.getExpiresAt().isAfter(now)) {
+            throw new ResponseStatusException(
+                    HttpStatus.GONE,
+                    "Invitation token has expired"
+            );
+        }
+
+        // 4. Reject duplicate emails without consuming the invitation
+        String email = request.email().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateEmailException("Email already registered");
         }
 
-        // 2. Sensible organization onboarding:
-        // Create an organization for the registering Admin
-        String orgName = (request.organizationName() != null && !request.organizationName().trim().isBlank())
-                ? request.organizationName().trim()
-                : request.name().trim() + "'s Organization";
+        Organization organization = invitation.getOrganization();
+        if (organization == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invitation is not associated with an organization"
+            );
+        }
 
-        Organization organization = new Organization(orgName, "Primary workspace for " + orgName);
-        organization = organizationRepository.save(organization);
-
-        // 3. Create a new User entity (Admin)
+        // 5. Assign organization and ADMIN role strictly server-side
         User user = new User();
         user.setName(request.name().trim());
         user.setEmail(email);
@@ -71,10 +102,20 @@ public class AuthService {
         user.setRole(UserRole.ADMIN);
         user.setOrganization(organization);
 
-        // 4. Save user in database
-        User savedUser = userRepository.save(user);
+        User savedUser = userRepository.saveAndFlush(user);
 
-        // 5. Convert Entity into Response DTO
+        // 6. Atomically mark invitation used only after user persistence succeeds
+        int updated = adminInvitationRepository.markUsedIfAvailable(invitation.getId(), now, now);
+        if (updated != 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Invitation token is no longer valid"
+            );
+        }
+
+        log.info("Registered ADMIN userId={} for organizationId={} using invitationId={}",
+                savedUser.getId(), organization.getId(), invitation.getId());
+
         return mapToUserResponse(savedUser);
     }
 

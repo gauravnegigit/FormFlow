@@ -12,6 +12,10 @@ All database credentials and JWT signing secrets are externalized via environmen
 | `DB_USERNAME` | Yes | None (fails startup if missing) | MySQL database username |
 | `DB_PASSWORD` | Yes | None (fails startup if missing) | MySQL database password |
 | `JWT_SECRET` | Yes | None (fails startup if missing) | Base64-encoded HMAC secret with at least 256 bits (32 bytes) of entropy |
+| `SUPER_ADMIN_EMAIL` | Yes (on initial boot) | None (fails startup if no SUPER_ADMIN exists) | Initial platform owner email address |
+| `SUPER_ADMIN_PASSWORD` | Yes (on initial boot) | None (fails startup if no SUPER_ADMIN exists) | Initial platform owner password (min 8 chars, BCrypt-hashed) |
+| `SUPER_ADMIN_NAME` | No | `Platform Owner` | Display name for the initial SUPER_ADMIN account |
+| `SUPER_ADMIN_BOOTSTRAP_ENABLED` | No | `true` | Enables/disables SUPER_ADMIN startup bootstrap |
 | `DB_URL` | No | `jdbc:mysql://localhost:3306/formflow_db` | JDBC MySQL connection URL |
 | `JWT_EXPIRATION_MS` | No | `86400000` (24 hours) | Access token expiration in milliseconds |
 | `FRONTEND_ORIGIN` | No (Yes in prod) | `http://localhost:5173` | Allowed CORS frontend origin(s), comma-separated (`*` is rejected) |

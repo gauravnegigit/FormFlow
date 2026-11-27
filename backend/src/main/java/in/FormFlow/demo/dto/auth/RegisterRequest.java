@@ -19,7 +19,8 @@ public record RegisterRequest(
     @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
     String password,
 
-    @Size(max = 150, message = "Organization name cannot exceed 150 characters")
-    String organizationName
+    @NotBlank(message = "Invitation token is required")
+    @Size(max = 255, message = "Invitation token is invalid")
+    String invitationToken
 
 ) {}

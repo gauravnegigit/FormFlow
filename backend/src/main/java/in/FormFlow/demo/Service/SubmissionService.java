@@ -1,5 +1,6 @@
 package in.FormFlow.demo.Service;
 
+import in.FormFlow.demo.dto.common.PageResponse;
 import in.FormFlow.demo.dto.form.AdminSubmissionResponse;
 import in.FormFlow.demo.dto.form.CreateSubmissionRequest;
 import in.FormFlow.demo.dto.form.PublicSubmissionTrackResponse;
@@ -17,6 +18,9 @@ import in.FormFlow.demo.exception.ResourceNotFoundException;
 import in.FormFlow.demo.Repository.FormRepository;
 import in.FormFlow.demo.Repository.SubmissionRepository;
 import in.FormFlow.demo.Repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,7 +37,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -117,7 +120,10 @@ public class SubmissionService {
     }
 
     @Transactional(readOnly = true)
-    public List<AdminSubmissionResponse> getFormSubmissions(UUID formId) {
+    public PageResponse<AdminSubmissionResponse> getFormSubmissions(
+            UUID formId,
+            SubmissionStatus status,
+            Pageable pageable) {
 
         User admin = getAuthenticatedAdmin();
         UUID orgId = admin.getOrganization().getId();
@@ -127,13 +133,14 @@ public class SubmissionService {
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Form not found"));
 
-        // 2. Fetch submissions scoped to this form and organization
-        List<Submission> submissions =
-                submissionRepository.findAllByForm_IdAndOrganization_Id(formId, orgId);
+        Pageable safePageable = PageResponse.clamp(pageable, Sort.by(Sort.Direction.DESC, "submittedAt"));
 
-        return submissions.stream()
-                .map(this::mapToAdminSubmissionResponse)
-                .toList();
+        // 2. Fetch paginated submissions scoped to this form, organization, and optional status
+        Page<Submission> submissions = (status != null)
+                ? submissionRepository.findAllByForm_IdAndOrganization_IdAndStatus(formId, orgId, status, safePageable)
+                : submissionRepository.findAllByForm_IdAndOrganization_Id(formId, orgId, safePageable);
+
+        return PageResponse.from(submissions, this::mapToAdminSubmissionResponse);
     }
 
     @Transactional(readOnly = true)
@@ -204,18 +211,36 @@ public class SubmissionService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReviewerSubmissionResponse> getAssignedSubmissions() {
+    public PageResponse<ReviewerSubmissionResponse> getAssignedSubmissions(
+            SubmissionStatus status,
+            Pageable pageable) {
+
+        User reviewer = getAuthenticatedReviewer();
+        UUID orgId = reviewer.getOrganization().getId();
+        Pageable safePageable = PageResponse.clamp(pageable, Sort.by(Sort.Direction.DESC, "submittedAt"));
+
+        // Fetch only submissions assigned to this reviewer in their organization
+        Page<Submission> submissions = (status != null)
+                ? submissionRepository.findAllByAssignedReviewer_IdAndOrganization_IdAndStatus(
+                        reviewer.getId(), orgId, status, safePageable)
+                : submissionRepository.findAllByAssignedReviewer_IdAndOrganization_Id(
+                        reviewer.getId(), orgId, safePageable);
+
+        return PageResponse.from(submissions, this::mapToReviewerSubmissionResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public ReviewerSubmissionResponse getAssignedSubmissionById(UUID submissionId) {
 
         User reviewer = getAuthenticatedReviewer();
         UUID orgId = reviewer.getOrganization().getId();
 
-        // Fetch only submissions assigned to this reviewer in their organization
-        List<Submission> submissions =
-                submissionRepository.findAllByAssignedReviewer_IdAndOrganization_Id(reviewer.getId(), orgId);
+        Submission submission = submissionRepository
+                .findByIdAndAssignedReviewer_IdAndOrganization_Id(submissionId, reviewer.getId(), orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Submission not found or not assigned to you"));
 
-        return submissions.stream()
-                .map(this::mapToReviewerSubmissionResponse)
-                .toList();
+        return mapToReviewerSubmissionResponse(submission);
     }
 
     @Transactional

@@ -1,5 +1,6 @@
 package in.FormFlow.demo.Service;
 
+import in.FormFlow.demo.dto.common.PageResponse;
 import in.FormFlow.demo.dto.form.CreateFormRequest;
 import in.FormFlow.demo.dto.form.FormResponse;
 import in.FormFlow.demo.dto.form.PublicFormResponse;
@@ -16,10 +17,12 @@ import tools.jackson.databind.JsonNode;
 
 import java.util.HashSet;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -91,17 +94,18 @@ public class FormService {
     }
 
     @Transactional(readOnly = true)
-    public List<FormResponse> getMyForms() {
+    public PageResponse<FormResponse> getMyForms(FormStatus status, Pageable pageable) {
 
         User user = getAuthenticatedAdmin();
         UUID orgId = user.getOrganization().getId();
+        Pageable safePageable = PageResponse.clamp(pageable, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        // Enforce organization isolation: return all forms in the user's organization
-        List<Form> forms = formRepository.findAllByOrganization_Id(orgId);
+        // Enforce organization isolation: return paginated forms in the user's organization
+        Page<Form> forms = (status != null)
+                ? formRepository.findAllByOrganization_IdAndStatus(orgId, status, safePageable)
+                : formRepository.findAllByOrganization_Id(orgId, safePageable);
 
-        return forms.stream()
-                .map(this::mapToResponse)
-                .toList();
+        return PageResponse.from(forms, this::mapToResponse);
     }
 
     @Transactional(readOnly = true)

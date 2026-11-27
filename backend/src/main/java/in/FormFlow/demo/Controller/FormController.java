@@ -1,22 +1,27 @@
 package in.FormFlow.demo.Controller;
 
+import in.FormFlow.demo.dto.common.PageResponse;
 import in.FormFlow.demo.dto.form.AdminSubmissionResponse;
 import in.FormFlow.demo.dto.form.CreateFormRequest;
 import in.FormFlow.demo.dto.form.FormResponse;
 import in.FormFlow.demo.dto.form.PublicFormResponse;
 import in.FormFlow.demo.dto.form.UpdateFormRequest;
+import in.FormFlow.demo.enums.FormStatus;
+import in.FormFlow.demo.enums.SubmissionStatus;
 import in.FormFlow.demo.Service.FormService;
 import in.FormFlow.demo.Service.SubmissionService;
 
 import jakarta.validation.Valid;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -31,7 +36,6 @@ public class FormController {
         this.submissionService = submissionService;
     }
 
-    // Create a new form
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> createForm(
@@ -47,9 +51,11 @@ public class FormController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<FormResponse>> getMyForms() {
+    public ResponseEntity<PageResponse<FormResponse>> getMyForms(
+            @RequestParam(name = "status", required = false) FormStatus status,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        List<FormResponse> forms = formService.getMyForms();
+        PageResponse<FormResponse> forms = formService.getMyForms(status, pageable);
 
         return ResponseEntity.ok(forms);
     }
@@ -116,11 +122,13 @@ public class FormController {
 
     @GetMapping("/{id}/submissions")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<AdminSubmissionResponse>> getFormSubmissions(
-            @PathVariable("id") UUID id) {
+    public ResponseEntity<PageResponse<AdminSubmissionResponse>> getFormSubmissions(
+            @PathVariable("id") UUID id,
+            @RequestParam(name = "status", required = false) SubmissionStatus status,
+            @PageableDefault(size = 20, sort = "submittedAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        List<AdminSubmissionResponse> submissions =
-                submissionService.getFormSubmissions(id);
+        PageResponse<AdminSubmissionResponse> submissions =
+                submissionService.getFormSubmissions(id, status, pageable);
 
         return ResponseEntity.ok(submissions);
     }

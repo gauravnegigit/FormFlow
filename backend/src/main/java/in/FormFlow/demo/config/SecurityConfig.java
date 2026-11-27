@@ -117,6 +117,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/submissions/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/submissions/track/**").permitAll()
 
+                .requestMatchers("/api/platform/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/forms/**").hasRole("ADMIN")
                 .requestMatchers("/api/submissions/**").hasRole("ADMIN")
