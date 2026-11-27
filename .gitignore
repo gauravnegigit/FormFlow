@@ -1,9 +1,15 @@
 .env
 .env.*
+!.env.example
+*.env
 target/
 .idea/
 .vscode/
 *.class
 *.log
-# Spring Boot secrets
+# Spring Boot secrets / local overrides
 backend/src/main/resources/application.properties
+backend/src/main/resources/application-local.properties
+backend/src/main/resources/application-local.yml
+backend/src/main/resources/application-secrets.properties
+backend/src/main/resources/application-secrets.yml

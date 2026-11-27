@@ -1,0 +1,37 @@
+spring.application.name=formflow
+
+# Copy to application.properties (ignored by Git) or set environment variables directly.
+# Required environment variables: DB_USERNAME, DB_PASSWORD, JWT_SECRET
+spring.datasource.url=${DB_URL:jdbc:mysql://localhost:3306/formflow_db}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=${JPA_SHOW_SQL:false}
+spring.jpa.properties.hibernate.format_sql=false
+
+# JWT_SECRET must be a Base64-encoded key with at least 256 bits (32 bytes) of entropy.
+# Example generation (PowerShell):
+#   $b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+# Example generation (OpenSSL):
+#   openssl rand -base64 32
+jwt.secret=${JWT_SECRET}
+jwt.expiration=${JWT_EXPIRATION_MS:86400000}
+jwt.expiration-ms=${JWT_EXPIRATION_MS:86400000}
+
+# CORS configuration (comma-separated origins via FRONTEND_ORIGIN; never uses '*')
+app.cors.allowed-origins=${FRONTEND_ORIGIN:http://localhost:5173}
+
+# Rate limiting configuration (single-instance in-memory windows)
+app.rate-limit.enabled=${RATE_LIMIT_ENABLED:true}
+app.rate-limit.trust-proxy-headers=${RATE_LIMIT_TRUST_PROXY_HEADERS:false}
+app.rate-limit.login.max-requests=${RATE_LIMIT_LOGIN_MAX:10}
+app.rate-limit.login.window-seconds=${RATE_LIMIT_LOGIN_WINDOW_SECONDS:60}
+app.rate-limit.register.max-requests=${RATE_LIMIT_REGISTER_MAX:5}
+app.rate-limit.register.window-seconds=${RATE_LIMIT_REGISTER_WINDOW_SECONDS:300}
+app.rate-limit.submit.max-requests=${RATE_LIMIT_SUBMIT_MAX:20}
+app.rate-limit.submit.window-seconds=${RATE_LIMIT_SUBMIT_WINDOW_SECONDS:60}
+app.rate-limit.track.max-requests=${RATE_LIMIT_TRACK_MAX:30}
+app.rate-limit.track.window-seconds=${RATE_LIMIT_TRACK_WINDOW_SECONDS:60}
+
+server.port=${SERVER_PORT:8080}

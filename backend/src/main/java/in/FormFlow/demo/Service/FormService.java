@@ -1,4 +1,3 @@
-
 package in.FormFlow.demo.Service;
 
 import in.FormFlow.demo.dto.form.CreateFormRequest;
@@ -6,14 +5,21 @@ import in.FormFlow.demo.dto.form.FormResponse;
 import in.FormFlow.demo.dto.form.PublicFormResponse;
 import in.FormFlow.demo.dto.form.UpdateFormRequest;
 import in.FormFlow.demo.Entity.Form;
+import in.FormFlow.demo.Entity.Organization;
 import in.FormFlow.demo.Entity.User;
 import in.FormFlow.demo.enums.FormStatus;
+import in.FormFlow.demo.enums.UserRole;
 import in.FormFlow.demo.Repository.FormRepository;
 import in.FormFlow.demo.Repository.UserRepository;
 import in.FormFlow.demo.exception.ResourceNotFoundException;
 import tools.jackson.databind.JsonNode;
+
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,25 +44,40 @@ public class FormService {
     @Transactional
     public FormResponse createForm(CreateFormRequest request, Authentication authentication) {
 
-        // 1. Get currently authenticated user ID from injected Authentication
-        UUID userId = UUID.fromString(authentication.getName());
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authentication required"
+            );
+        }
 
-        // 2. Find the creator in the database
+        // 1. Get currently authenticated user
+        UUID userId = UUID.fromString(authentication.getName());
         User creator = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        requireAdmin(creator);
+
+        // 2. Enforce Organization Multi-Tenancy: determine organization from DB
+        Organization organization = creator.getOrganization();
+        if (organization == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "User does not belong to any organization"
+            );
+        }
 
         // 3. Validate dynamic form schema
         validateSchema(request.schema());
 
         // 4. Create Form entity
         Form form = new Form();
-
         form.setTitle(request.title().trim());
         form.setDescription(request.description());
         form.setSchema(request.schema());
         form.setStatus(FormStatus.DRAFT);
         form.setCreatedBy(creator);
+        form.setOrganization(organization);
 
         // 5. Generate unique public slug
         String slug = generateSlug(request.title());
@@ -69,9 +90,209 @@ public class FormService {
         return mapToResponse(savedForm);
     }
 
+    @Transactional(readOnly = true)
+    public List<FormResponse> getMyForms() {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        // Enforce organization isolation: return all forms in the user's organization
+        List<Form> forms = formRepository.findAllByOrganization_Id(orgId);
+
+        return forms.stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public FormResponse getFormById(UUID formId) {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        Form form = formRepository
+                .findByIdAndOrganization_Id(formId, orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found"));
+
+        return mapToResponse(form);
+    }
+
+    @Transactional
+    public FormResponse updateForm(UUID formId, UpdateFormRequest request) {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        Form form = formRepository
+                .findByIdAndOrganization_Id(formId, orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found"));
+
+        // Only draft forms can be edited
+        if (form.getStatus() != FormStatus.DRAFT) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only draft forms can be updated"
+            );
+        }
+
+        validateSchema(request.schema());
+        form.setTitle(request.title().trim());
+        form.setDescription(request.description());
+        form.setSchema(request.schema());
+
+        Form updatedForm = formRepository.save(form);
+
+        return mapToResponse(updatedForm);
+    }
+
+    @Transactional
+    public void deleteForm(UUID formId) {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        Form form = formRepository
+                .findByIdAndOrganization_Id(formId, orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found"));
+
+        if (form.getStatus() != FormStatus.DRAFT) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only draft forms can be deleted"
+            );
+        }
+
+        formRepository.delete(form);
+    }
+
+    @Transactional
+    public FormResponse publishForm(UUID formId) {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        Form form = formRepository
+                .findByIdAndOrganization_Id(formId, orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found"));
+
+        if (form.getStatus() != FormStatus.DRAFT) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only draft forms can be published"
+            );
+        }
+
+        form.setStatus(FormStatus.PUBLISHED);
+
+        Form publishedForm = formRepository.save(form);
+
+        return mapToResponse(publishedForm);
+    }
+
+    @Transactional
+    public FormResponse closeForm(UUID formId) {
+
+        User user = getAuthenticatedAdmin();
+        UUID orgId = user.getOrganization().getId();
+
+        Form form = formRepository
+                .findByIdAndOrganization_Id(formId, orgId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found"));
+
+        if (form.getStatus() != FormStatus.PUBLISHED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Only published forms can be closed"
+            );
+        }
+
+        form.setStatus(FormStatus.CLOSED);
+
+        Form closedForm = formRepository.save(form);
+
+        return mapToResponse(closedForm);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicFormResponse getPublicForm(String slug) {
+
+        Form form = formRepository
+                .findByPublicSlugAndStatus(slug, FormStatus.PUBLISHED)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Form not found or is closed"));
+
+        return new PublicFormResponse(
+                form.getId(),
+                form.getTitle(),
+                form.getDescription(),
+                form.getSchema(),
+                form.getPublicSlug()
+        );
+    }
+
+    private User getAuthenticatedAdmin() {
+        User user = getAuthenticatedUser();
+        requireAdmin(user);
+        return user;
+    }
+
+    private void requireAdmin(User user) {
+        if (user.getRole() != UserRole.ADMIN) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only admins can manage forms"
+            );
+        }
+    }
+
+    private User getAuthenticatedUser() {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authentication required"
+            );
+        }
+
+        UUID userId = UUID.fromString(authentication.getName());
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (user.getOrganization() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "User does not belong to any organization"
+            );
+        }
+
+        return user;
+    }
+
+    static final Set<String> SUPPORTED_FIELD_TYPES = Set.of(
+            "text",
+            "textarea",
+            "number",
+            "email",
+            "phone",
+            "date",
+            "datetime",
+            "url",
+            "checkbox",
+            "select",
+            "multiselect"
+    );
+
     private void validateSchema(JsonNode schema) {
 
-        if (!schema.isObject()) {
+        if (schema == null || !schema.isObject()) {
             throw new IllegalArgumentException(
                     "Schema must be a JSON object");
         }
@@ -83,9 +304,11 @@ public class FormService {
                     "Schema must contain at least one field");
         }
 
+        Set<String> seenFieldIds = new HashSet<>();
+
         for (JsonNode field : fields) {
 
-            if (!field.isObject()
+            if (field == null || !field.isObject()
                     || !field.hasNonNull("id")
                     || !field.hasNonNull("label")
                     || !field.hasNonNull("type")
@@ -106,7 +329,66 @@ public class FormService {
                 throw new IllegalArgumentException(
                         "Invalid field property types");
             }
+
+            String fieldId = field.get("id").asString().trim();
+            if (!seenFieldIds.add(fieldId)) {
+                throw new IllegalArgumentException(
+                        "Duplicate field ID found: " + fieldId);
+            }
+
+            String fieldType = field.get("type").asString().trim().toLowerCase();
+            if (!SUPPORTED_FIELD_TYPES.contains(fieldType)) {
+                throw new IllegalArgumentException(
+                        "Unsupported field type '" + field.get("type").asString() + "' for field: " + fieldId);
+            }
+
+            boolean requiresOptions = "select".equals(fieldType) || "multiselect".equals(fieldType);
+            JsonNode optionsNode = field.get("options");
+
+            if (requiresOptions && (optionsNode == null || !optionsNode.isArray() || optionsNode.isEmpty())) {
+                throw new IllegalArgumentException(
+                        "Field '" + fieldId + "' of type '" + fieldType + "' must define a non-empty options array");
+            }
+
+            if (optionsNode != null && !optionsNode.isNull()) {
+                if (!optionsNode.isArray()) {
+                    throw new IllegalArgumentException(
+                            "Options for field '" + fieldId + "' must be an array");
+                }
+                extractOptionValues(fieldId, optionsNode);
+            }
         }
+    }
+
+    static Set<String> extractOptionValues(String fieldId, JsonNode optionsNode) {
+        Set<String> values = new LinkedHashSet<>();
+        for (JsonNode option : optionsNode) {
+            String optionValue;
+            if (option != null && option.isString()) {
+                optionValue = option.asString().trim();
+            } else if (option != null && option.isObject() && option.hasNonNull("value") && option.get("value").isString()) {
+                optionValue = option.get("value").asString().trim();
+                if (option.has("label") && !option.get("label").isNull()
+                        && (!option.get("label").isString() || option.get("label").asString().isBlank())) {
+                    throw new IllegalArgumentException(
+                            "Option label in field '" + fieldId + "' must be a non-blank string");
+                }
+            } else {
+                throw new IllegalArgumentException(
+                        "Each option in field '" + fieldId + "' must be a non-blank string or an object with a non-blank 'value'");
+            }
+
+            if (optionValue.isBlank()) {
+                throw new IllegalArgumentException(
+                        "Option value in field '" + fieldId + "' cannot be blank");
+            }
+
+            if (!values.add(optionValue)) {
+                throw new IllegalArgumentException(
+                        "Duplicate option value '" + optionValue + "' in field '" + fieldId + "'");
+            }
+        }
+        return values;
     }
 
     private String generateSlug(String title) {
@@ -116,11 +398,20 @@ public class FormService {
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("^-|-$", "");
 
+        if (normalized.isEmpty()) {
+            normalized = "form";
+        } else if (normalized.length() > 200) {
+            normalized = normalized.substring(0, 200).replaceAll("-$", "");
+        }
+
         return normalized + "-" +
                 UUID.randomUUID().toString().substring(0, 8);
     }
 
     private FormResponse mapToResponse(Form form) {
+
+        UUID orgId = form.getOrganization() != null ? form.getOrganization().getId() : null;
+        String orgName = form.getOrganization() != null ? form.getOrganization().getName() : null;
 
         return new FormResponse(
                 form.getId(),
@@ -130,169 +421,9 @@ public class FormService {
                 form.getStatus(),
                 form.getPublicSlug(),
                 form.getCreatedAt(),
-                form.getUpdatedAt()
+                form.getUpdatedAt(),
+                orgId,
+                orgName
         );
     }
-
-
-@Transactional(readOnly = true)
-public List<FormResponse> getMyForms() {
-
-    // 1. Get currently logged-in user
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    // 2. Fetch only forms created by this user
-    List<Form> forms =
-            formRepository.findAllByCreatedBy_Id(userId);
-
-    // 3. Convert entities into response DTOs
-    return forms.stream()
-            .map(this::mapToResponse)
-            .toList();
-}
-
-@Transactional(readOnly = true)
-public FormResponse getFormById(UUID formId) {
-
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    Form form = formRepository
-            .findByIdAndCreatedBy_Id(formId, userId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    return mapToResponse(form);
-}
-
-@Transactional
-public FormResponse updateForm(UUID formId, UpdateFormRequest request) {
-
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    Form form = formRepository
-            .findByIdAndCreatedBy_Id(formId, userId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    // Only draft forms can be edited
-    if (form.getStatus() != FormStatus.DRAFT) {
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Only draft forms can be updated"
-        );
-    }
-
-    validateSchema(request.schema());
-    form.setTitle(request.title().trim());
-    form.setDescription(request.description());
-    form.setSchema(request.schema());
-
-    Form updatedForm = formRepository.save(form);
-
-    return mapToResponse(updatedForm);
-}
-
-@Transactional
-public void deleteForm(UUID formId) {
-
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    Form form = formRepository
-            .findByIdAndCreatedBy_Id(formId, userId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    if (form.getStatus() != FormStatus.DRAFT) {
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Only draft forms can be deleted"
-        );
-    }
-
-    formRepository.delete(form);
-}
-
-@Transactional
-public FormResponse publishForm(UUID formId) {
-
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    Form form = formRepository
-            .findByIdAndCreatedBy_Id(formId, userId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    if (form.getStatus() != FormStatus.DRAFT) {
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Only draft forms can be published"
-        );
-    }
-
-    form.setStatus(FormStatus.PUBLISHED);
-
-    Form publishedForm = formRepository.save(form);
-
-    return mapToResponse(publishedForm);
-}
-
-@Transactional
-public FormResponse closeForm(UUID formId) {
-
-    Authentication authentication =
-            SecurityContextHolder.getContext().getAuthentication();
-
-    UUID userId = UUID.fromString(authentication.getName());
-
-    Form form = formRepository
-            .findByIdAndCreatedBy_Id(formId, userId)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    if (form.getStatus() != FormStatus.PUBLISHED) {
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Only published forms can be closed"
-        );
-    }
-
-    form.setStatus(FormStatus.CLOSED);
-
-    Form closedForm = formRepository.save(form);
-
-    return mapToResponse(closedForm);
-}
-
-@Transactional(readOnly = true)
-public PublicFormResponse getPublicForm(String slug) {
-
-    Form form = formRepository
-            .findByPublicSlugAndStatus(slug, FormStatus.PUBLISHED)
-            .orElseThrow(() ->
-                    new ResourceNotFoundException("Form not found"));
-
-    return new PublicFormResponse(
-            form.getId(),
-            form.getTitle(),
-            form.getDescription(),
-            form.getSchema(),
-            form.getPublicSlug()
-    );
-}
-
 }

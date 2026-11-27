@@ -1,4 +1,3 @@
-
 package in.FormFlow.demo.dto.auth;
 
 import jakarta.validation.constraints.Email;
@@ -8,15 +7,19 @@ import jakarta.validation.constraints.Size;
 public record RegisterRequest(
 
     @NotBlank(message = "Name is required")
-    @Size(max = 100)
+    @Size(max = 100, message = "Name cannot exceed 100 characters")
     String name,
 
     @NotBlank(message = "Email is required")
     @Email(message = "Enter a valid email")
+    @Size(max = 255, message = "Email cannot exceed 255 characters")
     String email,
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
-    String password
+    @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+    String password,
+
+    @Size(max = 150, message = "Organization name cannot exceed 150 characters")
+    String organizationName
 
 ) {}

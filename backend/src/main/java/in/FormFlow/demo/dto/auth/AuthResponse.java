@@ -1,4 +1,3 @@
-
 package in.FormFlow.demo.dto.auth;
 
 import in.FormFlow.demo.enums.UserRole;
@@ -10,5 +9,7 @@ public record AuthResponse(
         UUID userId,
         String name,
         String email,
-        UserRole role
+        UserRole role,
+        UUID organizationId,
+        String organizationName
 ) {}

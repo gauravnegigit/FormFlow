@@ -10,5 +10,11 @@ public record AdminSubmissionResponse(
         UUID id,
         JsonNode answers,
         SubmissionStatus status,
-        LocalDateTime submittedAt
+        String category,
+        UUID assignedReviewerId,
+        String assignedReviewerName,
+        LocalDateTime assignedAt,
+        LocalDateTime submittedAt,
+        LocalDateTime reviewedAt,
+        String rejectionReason
 ) {}

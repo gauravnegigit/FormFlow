@@ -1,4 +1,3 @@
-
 package in.FormFlow.demo.Entity;
 
 import in.FormFlow.demo.enums.UserRole;
@@ -11,12 +10,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(
-    name = "users",
-    uniqueConstraints = {
-        @UniqueConstraint(columnNames = "email")
-    }
-)
+@Table(name = "users")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -39,6 +33,10 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id", nullable = false)
+    private Organization organization;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -47,8 +45,9 @@ public class User {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
     }
 
     @PreUpdate

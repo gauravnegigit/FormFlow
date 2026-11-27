@@ -1,9 +1,7 @@
-
 package in.FormFlow.demo.dto.form;
 
-import tools.jackson.databind.JsonNode;
-
 import in.FormFlow.demo.enums.FormStatus;
+import tools.jackson.databind.JsonNode;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -24,6 +22,10 @@ public record FormResponse(
 
         LocalDateTime createdAt,
 
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+
+        UUID organizationId,
+
+        String organizationName
 
 ) {}

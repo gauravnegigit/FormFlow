@@ -23,10 +23,29 @@ public class JwtService {
             @Value("${jwt.secret}") String secret,
             @Value("${jwt.expiration-ms:${jwt.expiration:86400000}}") long expiration) {
 
-        this.secretKey = Keys.hmacShaKeyFor(
-                Decoders.BASE64.decode(secret)
-        );
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "Missing required JWT_SECRET configuration. Provide a Base64-encoded key with at least 256 bits of entropy."
+            );
+        }
 
+        byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(secret.trim());
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException(
+                    "Invalid JWT_SECRET configuration. Value must be Base64-encoded.",
+                    ex
+            );
+        }
+
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "Weak JWT_SECRET configuration. Decoded key must be at least 256 bits (32 bytes)."
+            );
+        }
+
+        this.secretKey = Keys.hmacShaKeyFor(keyBytes);
         this.expiration = expiration;
     }
 

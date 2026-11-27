@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +33,7 @@ public class FormController {
 
     // Create a new form
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> createForm(
             @Valid @RequestBody CreateFormRequest request,
             Authentication authentication) {
@@ -44,6 +46,7 @@ public class FormController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<FormResponse>> getMyForms() {
 
         List<FormResponse> forms = formService.getMyForms();
@@ -52,8 +55,9 @@ public class FormController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> getFormById(
-            @PathVariable UUID id) {
+            @PathVariable("id") UUID id) {
 
         FormResponse response = formService.getFormById(id);
 
@@ -61,8 +65,9 @@ public class FormController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> updateForm(
-            @PathVariable UUID id,
+            @PathVariable("id") UUID id,
             @Valid @RequestBody UpdateFormRequest request) {
 
         FormResponse response = formService.updateForm(id, request);
@@ -71,7 +76,8 @@ public class FormController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteForm(@PathVariable UUID id) {
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteForm(@PathVariable("id") UUID id) {
 
         formService.deleteForm(id);
 
@@ -79,8 +85,9 @@ public class FormController {
     }
 
     @PatchMapping("/{id}/publish")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> publishForm(
-            @PathVariable UUID id) {
+            @PathVariable("id") UUID id) {
 
         FormResponse response = formService.publishForm(id);
 
@@ -88,8 +95,9 @@ public class FormController {
     }
 
     @PatchMapping("/{id}/close")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<FormResponse> closeForm(
-            @PathVariable UUID id) {
+            @PathVariable("id") UUID id) {
 
         FormResponse response = formService.closeForm(id);
 
@@ -98,7 +106,7 @@ public class FormController {
 
     @GetMapping("/public/{slug}")
     public ResponseEntity<PublicFormResponse> getPublicForm(
-            @PathVariable String slug) {
+            @PathVariable("slug") String slug) {
 
         PublicFormResponse response =
                 formService.getPublicForm(slug);
@@ -107,8 +115,9 @@ public class FormController {
     }
 
     @GetMapping("/{id}/submissions")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<AdminSubmissionResponse>> getFormSubmissions(
-            @PathVariable UUID id) {
+            @PathVariable("id") UUID id) {
 
         List<AdminSubmissionResponse> submissions =
                 submissionService.getFormSubmissions(id);

@@ -24,6 +24,10 @@ public class Submission {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organization_id", nullable = false)
+    private Organization organization;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "form_id", nullable = false)
     private Form form;
 
@@ -38,17 +42,59 @@ public class Submission {
     @Column(name = "tracking_token", nullable = false, unique = true)
     private String trackingToken;
 
+    @Column(name = "category", length = 100)
+    private String category;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_to")
+    private User assignedReviewer;
+
+    @Column(name = "assigned_at")
+    private LocalDateTime assignedAt;
+
     @Column(name = "submitted_at", nullable = false)
     private LocalDateTime submittedAt;
 
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
+
+    @Column(name = "duplicate_flag", nullable = false)
+    private Boolean duplicateFlag = false;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "verification", columnDefinition = "json")
+    private JsonNode verification;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
     @PrePersist
     public void onCreate() {
-        submittedAt = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
+        if (submittedAt == null) {
+            submittedAt = now;
+        }
         if (trackingToken == null) {
             trackingToken = UUID.randomUUID().toString();
         }
         if (status == null) {
             status = SubmissionStatus.PENDING;
         }
+        if (duplicateFlag == null) {
+            duplicateFlag = false;
+        }
+    }
+
+    @PreUpdate
+    public void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

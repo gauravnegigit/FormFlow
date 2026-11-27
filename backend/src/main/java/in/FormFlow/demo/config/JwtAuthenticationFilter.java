@@ -11,6 +11,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +23,8 @@ import java.io.IOException;
 import java.util.List;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
 
@@ -37,15 +41,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         
         String authHeader = request.getHeader("Authorization");
-        
-        System.out.println("REQUEST: " + request.getMethod()
-        + " " + request.getRequestURI());
+        String safeUri = sanitizeUri(request.getRequestURI());
 
-        System.out.println("AUTH HEADER PRESENT: "
-                + (authHeader != null));
-
-        System.out.println("BEARER PREFIX PRESENT: "
-                + (authHeader != null && authHeader.startsWith("Bearer ")));
+        log.debug("Processing {} {}", request.getMethod(), safeUri);
 
         // No token: continue; SecurityConfig decides whether access is allowed
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -62,8 +60,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String userId = claims.getSubject();
                 String role = claims.get("role", String.class);
 
-                String authority = (role != null && role.startsWith("ROLE_")) ? role : "ROLE_" + role;
-                var authorities = role != null ? List.of(new SimpleGrantedAuthority(authority)) : List.<SimpleGrantedAuthority>of();
+                List<SimpleGrantedAuthority> authorities = List.of();
+                if (role != null && !role.isBlank()) {
+                    String normalizedRole = role.trim();
+                    String authority = normalizedRole.startsWith("ROLE_") ? normalizedRole : "ROLE_" + normalizedRole;
+                    authorities = List.of(new SimpleGrantedAuthority(authority));
+                }
 
                 var authentication =
                         new UsernamePasswordAuthenticationToken(
@@ -80,12 +82,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         } catch (JwtException | IllegalArgumentException ex) {
 
-            System.out.println("JWT VALIDATION FAILED!");
-            System.out.println("Reason: " + ex.getMessage());
+            log.warn("JWT authentication failed for {} {}: {}",
+                    request.getMethod(),
+                    safeUri,
+                    ex.getClass().getSimpleName());
 
             SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String sanitizeUri(String uri) {
+        if (uri == null) {
+            return "";
+        }
+        if (uri.startsWith("/api/submissions/track/")) {
+            return "/api/submissions/track/***";
+        }
+        return uri;
     }
 }
